@@ -20,7 +20,7 @@ object SampleData {
             """.trimIndent()
         ),
 
-        Message("Paavo", "Lorem ipsum dolor sit amet, consectetur adipiscing elit."),
+        Message("PAAVO", "Lorem ipsum dolor sit amet, consectetur adipiscing elit."),
         Message("Paavo", "Nullam sem neque, dapibus non nisi ut, consequat pretium purus. Nam mattis, nisi a elementum convallis, erat turpis convallis augue, accumsan placerat purus diam eget nisi."),
         Message("Paavo", "Aliquam ut nunc pellentesque, blandit lorem sit amet, sodales tortor. Vivamus vitae ipsum tellus. Vestibulum posuere lorem nec cursus pulvinar. Nulla facilisi. Phasellus eu neque ut metus posuere finibus. Morbi nibh ante, tempus nec augue sit amet, interdum faucibus nunc. "),
         Message("Paavo", "Nam tristique elit et arcu porttitor, ac auctor neque aliquam."),
