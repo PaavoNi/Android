@@ -114,7 +114,7 @@ fun PreviewMessageCard() {
     ComposeTutorialTheme {
         Surface {
             MessageCard(
-                msg = Message("Lexi", "Hey, take a look at Jetpack Compose, it's great!")
+                msg = Message("Paavo", "Hey, take a look at Jetpack Compose, it's great!")
             )
         }
     }
