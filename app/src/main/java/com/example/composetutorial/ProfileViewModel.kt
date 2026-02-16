@@ -16,7 +16,7 @@ class ProfileViewModel(private val userDao: UserDao) : ViewModel() {
     fun saveUserData(username: String, imageUri: String) {
         viewModelScope.launch {
             val userData = UserData(username = username, imageUri = imageUri)
-            userDao.insertUserData(userData)
+            userDao.saveUserData(userData)
         }
     }
 }

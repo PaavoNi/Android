@@ -1,8 +1,12 @@
 package com.example.composetutorial
 
+import android.Manifest
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -32,7 +36,6 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +49,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
@@ -78,10 +82,7 @@ fun MyApp(userDao: UserDao) {
     val navController = rememberNavController()
     val profileViewModel: ProfileViewModel = viewModel(factory = ProfileViewModelFactory(userDao))
 
-    NavHost(navController = navController, startDestination = "loading") {
-        composable("loading") {
-            LoadingScreen(navController, profileViewModel)
-        }
+    NavHost(navController = navController, startDestination = "profile_display") {
         composable("profile_input") {
             ProfileInputScreen(navController, profileViewModel)
         }
@@ -91,27 +92,6 @@ fun MyApp(userDao: UserDao) {
         composable("messages") {
             MessagesScreen(navController, profileViewModel)
         }
-    }
-}
-
-@Composable
-fun LoadingScreen(navController: NavController, viewModel: ProfileViewModel) {
-    val userData by viewModel.userData.collectAsState()
-
-    LaunchedEffect(userData) {
-        if (userData != null) {
-            navController.navigate("profile_display") {
-                popUpTo("loading") { inclusive = true }
-            }
-        } else {
-            navController.navigate("profile_input") {
-                popUpTo("loading") { inclusive = true }
-            }
-        }
-    }
-
-    Surface(modifier = Modifier.fillMaxSize()) {
-        // You can show a loading indicator here if you want
     }
 }
 
@@ -159,7 +139,9 @@ fun ProfileInputScreen(navController: NavController, viewModel: ProfileViewModel
                 imageUri?.let { uri ->
                     val newUri = saveImageToInternalStorage(context, uri)
                     viewModel.saveUserData(username, newUri.toString())
-                    navController.navigate("profile_display")
+                    navController.navigate("profile_display") {
+                        popUpTo("profile_input") { inclusive = true }
+                    }
                 }
             }) {
                 Text("Save")
@@ -171,6 +153,16 @@ fun ProfileInputScreen(navController: NavController, viewModel: ProfileViewModel
 @Composable
 fun ProfileDisplayScreen(navController: NavController, viewModel: ProfileViewModel) {
     val userData by viewModel.userData.collectAsState()
+    val context = LocalContext.current
+    val intent = Intent(context, SensorService::class.java)
+
+    val requestPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        if (isGranted) {
+            context.startService(intent)
+        }
+    }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -197,6 +189,26 @@ fun ProfileDisplayScreen(navController: NavController, viewModel: ProfileViewMod
             Spacer(modifier = Modifier.height(16.dp))
             Button(onClick = { navController.navigate("messages") }) {
                 Text("View Messages")
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    when (PackageManager.PERMISSION_GRANTED) {
+                        ContextCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.POST_NOTIFICATIONS
+                        ) -> {
+                            context.startService(intent)
+                        }
+                        else -> {
+                            requestPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        }
+                    }
+                } else {
+                    context.startService(intent)
+                }
+            }) {
+                Text("Start Light sensor")
             }
         }
     }
