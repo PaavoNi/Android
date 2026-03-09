@@ -18,29 +18,14 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Send
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,7 +51,10 @@ class MainActivity : ComponentActivity() {
         val db = Room.databaseBuilder(
             applicationContext,
             AppDatabase::class.java, "database-name"
-        ).allowMainThreadQueries().build()
+        )
+            .allowMainThreadQueries()
+            .fallbackToDestructiveMigration()
+            .build()
         val userDao = db.userDao()
 
         setContent {
@@ -82,6 +70,10 @@ fun MyApp(userDao: UserDao) {
     val navController = rememberNavController()
     val profileViewModel: ProfileViewModel = viewModel(factory = ProfileViewModelFactory(userDao))
 
+    LaunchedEffect(Unit) {
+        profileViewModel.loadSampleMessagesIfEmpty()
+    }
+
     NavHost(navController = navController, startDestination = "profile_display") {
         composable("profile_input") {
             ProfileInputScreen(navController, profileViewModel)
@@ -91,6 +83,9 @@ fun MyApp(userDao: UserDao) {
         }
         composable("messages") {
             MessagesScreen(navController, profileViewModel)
+        }
+        composable("weather") {
+            WeatherScreen(navController, profileViewModel)
         }
     }
 }
@@ -184,11 +179,15 @@ fun ProfileDisplayScreen(navController: NavController, viewModel: ProfileViewMod
             }
             Spacer(modifier = Modifier.height(16.dp))
             Button(onClick = { navController.navigate("profile_input") }) {
-                Text("Edit")
+                Text("Edit Profile")
             }
             Spacer(modifier = Modifier.height(16.dp))
             Button(onClick = { navController.navigate("messages") }) {
                 Text("View Messages")
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(onClick = { navController.navigate("weather") }) {
+                Text("Weather in Oulu")
             }
             Spacer(modifier = Modifier.height(16.dp))
             Button(onClick = {
@@ -208,7 +207,7 @@ fun ProfileDisplayScreen(navController: NavController, viewModel: ProfileViewMod
                     context.startService(intent)
                 }
             }) {
-                Text("Start Light sensor")
+                Text("Start Light Sensor")
             }
         }
     }
@@ -216,12 +215,72 @@ fun ProfileDisplayScreen(navController: NavController, viewModel: ProfileViewMod
 
 @Composable
 fun MessagesScreen(navController: NavController, viewModel: ProfileViewModel) {
+    val messages by viewModel.messages.collectAsState()
     val userData by viewModel.userData.collectAsState()
+    var text by remember { mutableStateOf("") }
+
     Surface(modifier = Modifier.fillMaxSize()) {
-        Column {
-            Conversation(messages = SampleData.conversationSample, user = userData)
-            Button(onClick = { navController.popBackStack() }) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Conversation(messages = messages, user = userData, modifier = Modifier.weight(1f))
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Type a message...") }
+                )
+                IconButton(onClick = {
+                    if (text.isNotBlank()) {
+                        viewModel.sendMessage(userData?.username ?: "Me", text)
+                        text = ""
+                    }
+                }) {
+                    Icon(Icons.Default.Send, contentDescription = "Send")
+                }
+            }
+            Button(
+                onClick = { navController.popBackStack() },
+                modifier = Modifier.padding(top = 8.dp)
+            ) {
                 Text("Back to Profile")
+            }
+        }
+    }
+}
+
+@Composable
+fun WeatherScreen(navController: NavController, viewModel: ProfileViewModel) {
+    val weather by viewModel.weatherState
+
+    LaunchedEffect(Unit) {
+        viewModel.fetchWeather()
+    }
+
+    Surface(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text("Weather in Oulu", style = MaterialTheme.typography.headlineLarge)
+            Spacer(modifier = Modifier.height(24.dp))
+
+            if (weather != null) {
+                Text("Temperature: ${weather!!.current.temperature_2m}°C", style = MaterialTheme.typography.headlineMedium)
+                Text("Wind Speed: ${weather!!.current.wind_speed_10m} km/h", style = MaterialTheme.typography.bodyLarge)
+                Text("Weather Code: ${weather!!.current.weather_code}", style = MaterialTheme.typography.bodyMedium)
+            } else {
+                CircularProgressIndicator()
+            }
+
+            Spacer(modifier = Modifier.height(32.dp))
+            Button(onClick = { navController.popBackStack() }) {
+                Text("Back")
             }
         }
     }
@@ -238,11 +297,11 @@ fun saveImageToInternalStorage(context: Context, uri: Uri): Uri {
 data class Message(val author: String, val body: String)
 
 @Composable
-fun MessageCard(msg: Message, user: UserData?) {
+fun MessageCard(author: String, body: String, user: UserData?) {
     Row(modifier = Modifier.padding(all = 8.dp)) {
-        user?.imageUri?.let {
+        if (author == user?.username) {
             AsyncImage(
-                model = Uri.parse(it),
+                model = Uri.parse(user.imageUri),
                 contentDescription = "Profile picture",
                 modifier = Modifier
                     .size(40.dp)
@@ -250,14 +309,16 @@ fun MessageCard(msg: Message, user: UserData?) {
                     .border(1.5.dp, MaterialTheme.colorScheme.secondary, CircleShape),
                 contentScale = ContentScale.Crop
             )
-        } ?: Image(
-            painter = painterResource(R.drawable.profile_picture),
-            contentDescription = "Contact profile picture",
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .border(1.5.dp, MaterialTheme.colorScheme.secondary, CircleShape)
-        )
+        } else {
+            Image(
+                painter = painterResource(R.drawable.profile_picture),
+                contentDescription = "Contact profile picture",
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .border(1.5.dp, MaterialTheme.colorScheme.secondary, CircleShape)
+            )
+        }
         Spacer(modifier = Modifier.width(8.dp))
 
         var isExpanded by remember { mutableStateOf(false) }
@@ -267,7 +328,7 @@ fun MessageCard(msg: Message, user: UserData?) {
 
         Column(modifier = Modifier.clickable { isExpanded = !isExpanded }) {
             Text(
-                text = msg.author,
+                text = author,
                 color = MaterialTheme.colorScheme.secondary,
                 style = MaterialTheme.typography.titleSmall
             )
@@ -281,7 +342,7 @@ fun MessageCard(msg: Message, user: UserData?) {
                 modifier = Modifier.animateContentSize().padding(1.dp)
             ) {
                 Text(
-                    text = msg.body,
+                    text = body,
                     modifier = Modifier.padding(all = 4.dp),
                     maxLines = if (isExpanded) Int.MAX_VALUE else 1,
                     style = MaterialTheme.typography.bodyMedium
@@ -292,38 +353,10 @@ fun MessageCard(msg: Message, user: UserData?) {
 }
 
 @Composable
-fun Conversation(messages: List<Message>, user: UserData?) {
-    LazyColumn {
+fun Conversation(messages: List<MessageEntity>, user: UserData?, modifier: Modifier = Modifier) {
+    LazyColumn(modifier = modifier) {
         items(messages) { message ->
-            MessageCard(msg = message.copy(author = user?.username ?: message.author), user = user)
-        }
-    }
-}
-
-@Preview(name = "Light Mode")
-@Preview(
-    uiMode = Configuration.UI_MODE_NIGHT_YES,
-    showBackground = true,
-    name = "Dark Mode"
-)
-@Composable
-fun PreviewMessageCard() {
-    ComposeTutorialTheme {
-        Surface {
-            MessageCard(
-                msg = Message("Lexi", "Hey, take a look at Jetpack Compose, it's great!"),
-                user = null
-            )
-        }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun PreviewConversation() {
-    ComposeTutorialTheme {
-        Surface {
-            Conversation(SampleData.conversationSample, user = null)
+            MessageCard(author = message.author, body = message.body, user = user)
         }
     }
 }

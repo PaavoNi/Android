@@ -13,4 +13,13 @@ interface UserDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveUserData(userData: UserData)
+
+    @Query("SELECT * FROM messages ORDER BY timestamp ASC")
+    fun getAllMessages(): Flow<List<MessageEntity>>
+
+    @Query("SELECT * FROM messages")
+    suspend fun getAllMessagesFirst(): List<MessageEntity>?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMessage(message: MessageEntity)
 }
